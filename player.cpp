@@ -14,6 +14,7 @@ Player::Player(Side side) {
      * precalculating things, etc.) However, remember that you will only have
      * 30 seconds.
      */
+    mySide = side;
 }
 
 /*
@@ -39,5 +40,25 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
      * TODO: Implement how moves your AI should play here. You should first
      * process the opponent's opponents move before calculating your own move
      */ 
+    
+    // record opponent's move
+    board.doMove(opponentsMove, flipSide(mySide));
+    
+    // make the first legal move I can find
+    for (int x = 0; x < 8; x++)
+    {
+        for (int y = 0; y < 8; y++)
+        {
+            Move *moveToTry = new Move(x, y);
+            if (board.checkMove(moveToTry, mySide))
+            {
+                board.doMove(moveToTry, mySide);
+                return moveToTry;
+            }
+        }
+    }
+    
+    // no legal moves are available; pass
+    board.doMove(NULL, mySide);
     return NULL;
 }

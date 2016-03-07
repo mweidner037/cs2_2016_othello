@@ -5,6 +5,11 @@ enum Side {
     WHITE, BLACK
 };
 
+inline Side flipSide(Side side)
+{
+    return (side == WHITE)? BLACK: WHITE;
+}
+
 class Move {
    
 public:
