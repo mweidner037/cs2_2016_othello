@@ -1,5 +1,7 @@
 #include "player.h"
 
+#define MINIMAX_DEPTH 2
+
 /*
  * Constructor for the player; initialize everything here. The side your AI is
  * on (BLACK or WHITE) is passed in as "side". The constructor must finish 
@@ -55,7 +57,7 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     // run mimimax
     Move *move = NULL;
     int score;
-    minimax(board, mySide, false, 2, &score, &move);
+    minimax(board, mySide, false, MINIMAX_DEPTH, &score, &move);
     
     // make the chosen move (possibly NULL, if there are no legal moves)
     board.doMove(move, mySide);
