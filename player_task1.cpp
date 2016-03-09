@@ -1,4 +1,4 @@
-/* player.cpp for task 2 of assignment part 1 (build a working
+/* player.cpp for task 1 of assignment part 1 (build a working
 * player).  To compile, rename this file to player.cpp
 * and make.
 */
@@ -49,10 +49,7 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     // record opponent's move
     board.doMove(opponentsMove, flipSide(mySide));
     
-    // greedy approach: make the legal move which maximizes my stone count
-    // in 20 games against SimplePlayer, record is 11-1-8
-    int maxCount = 0;
-    Move *maxCountMove = NULL;
+    // make the first legal move I can find
     for (int x = 0; x < 8; x++)
     {
         for (int y = 0; y < 8; y++)
@@ -60,19 +57,13 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
             Move *moveToTry = new Move(x, y);
             if (board.checkMove(moveToTry, mySide))
             {
-                // try out the move on a copy of board
-                Board boardCopy = board;
-                boardCopy.doMove(moveToTry, mySide);
-                if (boardCopy.count(mySide) > maxCount)
-                {
-                    maxCount = boardCopy.count(mySide);
-                    maxCountMove = moveToTry;
-                }
+                board.doMove(moveToTry, mySide);
+                return moveToTry;
             }
         }
     }
     
-    // make the chosen move (possibly NULL, if there are no legal moves)
-    board.doMove(maxCountMove, mySide);
-    return maxCountMove;
+    // no legal moves are available; pass
+    board.doMove(NULL, mySide);
+    return NULL;
 }
