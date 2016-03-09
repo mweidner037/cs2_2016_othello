@@ -2,6 +2,7 @@
 #define __PLAYER_H__
 
 #include <iostream>
+#include <limits>
 #include "common.h"
 #include "board.h"
 using namespace std;
@@ -12,6 +13,8 @@ public:
     Player(Side side);
     ~Player();
     
+    void setBoard(Board &board);
+    
     Move *doMove(Move *opponentsMove, int msLeft);
 
     // Flag to tell if the player is running within the test_minimax context
@@ -20,6 +23,9 @@ public:
 private:
     Side mySide;
     Board board;
+    void minimax(Board &currentBoard, Side turn, bool minElseMax,
+            int depth, int *scoreReturnValue, Move **moveReturnValue);
+    int score(Board &currentBoard, Side side);
 };
 
 #endif

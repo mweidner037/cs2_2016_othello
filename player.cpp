@@ -1,8 +1,3 @@
-/* player.cpp for task 2 of assignment part 1 (build a working
-* player).  To compile, rename this file to player.cpp
-* and make.
-*/
-
 #include "player.h"
 
 /*
@@ -28,6 +23,14 @@ Player::Player(Side side) {
 Player::~Player() {
 }
 
+/**
+ * @brief Set the internal board to a copy of the given board.
+ */
+void Player::setBoard(Board &board)
+{
+    this->board = board;
+}
+
 /*
  * Compute the next move given the opponent's last move. Your AI is
  * expected to keep track of the board on its own. If this is the first move,
@@ -49,30 +52,78 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     // record opponent's move
     board.doMove(opponentsMove, flipSide(mySide));
     
-    // greedy approach: make the legal move which maximizes my stone count
-    // in 20 games against SimplePlayer, record is 11-1-8
-    int maxCount = 0;
-    Move *maxCountMove = NULL;
+    // run mimimax
+    Move *move = NULL;
+    int score;
+    minimax(board, mySide, false, 2, &score, &move);
+    
+    // make the chosen move (possibly NULL, if there are no legal moves)
+    board.doMove(move, mySide);
+    return move;
+}
+
+/**
+ * @brief Apply minimax to currentBoard to the given depth, putting
+ * the minimax score and move in scoreReturnValue and moveReturnValue.
+ *
+ * @param currentBoard The board to start with
+ * @param turn The Side which makes the next move
+ * @param minElseMax If true, find the move with min score, else
+ *      find the move with max score
+ * @param depth The depth to recurse to.  If <=0, just return the result
+ * of getScore on the inputs.
+ * @param scoreReturnValue Used to return the minimax score
+ * @param moveReturnValue Used to return the minimax move
+ **/
+ 
+void Player::minimax(Board &currentBoard, Side turn, bool minElseMax,
+        int depth, int *scoreReturnValue, Move **moveReturnValue)
+{
+    if (depth <= 0) {
+        *(scoreReturnValue) = score(currentBoard, flipSide(turn));
+        return;
+    }
+    
+    Move *bestMoveSoFar = NULL;
+    int bestScoreSoFar = (minElseMax? std::numeric_limits<int>::max():
+            std::numeric_limits<int>::min());
     for (int x = 0; x < 8; x++)
     {
         for (int y = 0; y < 8; y++)
         {
             Move *moveToTry = new Move(x, y);
-            if (board.checkMove(moveToTry, mySide))
+            if (currentBoard.checkMove(moveToTry, turn))
             {
-                // try out the move on a copy of board
-                Board boardCopy = board;
+                // try out the move on a copy of currentBoard
+                Board boardCopy = currentBoard;
                 boardCopy.doMove(moveToTry, mySide);
-                if (boardCopy.count(mySide) > maxCount)
+                // recurse
+                Move *bestMoveRecurse = NULL;
+                int bestScoreRecurse;
+                minimax(boardCopy, flipSide(turn), !minElseMax, depth - 1,
+                        &bestScoreRecurse, &bestMoveRecurse);
+                if ((minElseMax && bestScoreRecurse < bestScoreSoFar) ||
+                        (!minElseMax && bestScoreRecurse > bestScoreSoFar))
                 {
-                    maxCount = boardCopy.count(mySide);
-                    maxCountMove = moveToTry;
+                    if (bestMoveSoFar) delete bestMoveSoFar;
+                    bestScoreSoFar = bestScoreRecurse;
+                    bestMoveSoFar = moveToTry;
                 }
+                else delete moveToTry;
             }
         }
     }
     
-    // make the chosen move (possibly NULL, if there are no legal moves)
-    board.doMove(maxCountMove, mySide);
-    return maxCountMove;
+    //return the best move
+    *(scoreReturnValue) = bestScoreSoFar;
+    *(moveReturnValue) = bestMoveSoFar;
+}
+
+/**
+ * @brief Score currentBoard for side (higher is better).
+ */
+int Player::score(Board &currentBoard, Side side)
+{
+    // return (# side's stones - #other side's stones)
+    return (currentBoard.count(side) - currentBoard.count(flipSide(side)));
 }
