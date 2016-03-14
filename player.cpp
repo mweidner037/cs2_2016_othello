@@ -1,6 +1,7 @@
 #include "player.h"
 
-#define MINIMAX_DEPTH 2
+#define MINIMAX_DEPTH 9
+#define CORNER_BONUS 100
 
 /*
  * Constructor for the player; initialize everything here. The side your AI is
@@ -17,6 +18,9 @@ Player::Player(Side side) {
      * 30 seconds.
      */
     mySide = side;
+    //TODO: initialize board
+    
+    totalNodesSearched = 0;
 }
 
 /*
@@ -52,80 +56,257 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
      */ 
     
     // record opponent's move
-    board.doMove(opponentsMove, flipSide(mySide));
-    
-    // run mimimax
-    Move *move = NULL;
-    int score;
-    minimax(board, mySide, false, MINIMAX_DEPTH, &score, &move);
-    
-    // make the chosen move (possibly NULL, if there are no legal moves)
-    board.doMove(move, mySide);
-    return move;
-}
-
-/**
- * @brief Apply minimax to currentBoard to the given depth, putting
- * the minimax score and move in scoreReturnValue and moveReturnValue.
- *
- * @param currentBoard The board to start with
- * @param turn The Side which makes the next move
- * @param minElseMax If true, find the move with min score, else
- *      find the move with max score
- * @param depth The depth to recurse to.  If <=0, just return the result
- * of getScore on the inputs.
- * @param scoreReturnValue Used to return the minimax score
- * @param moveReturnValue Used to return the minimax move
- **/
- 
-void Player::minimax(Board &currentBoard, Side turn, bool minElseMax,
-        int depth, int *scoreReturnValue, Move **moveReturnValue)
-{
-    if (depth <= 0) {
-        *(scoreReturnValue) = score(currentBoard, flipSide(turn));
-        return;
+    if (opponentsMove != NULL)
+    {
+        applyMove(board, opponentsMove->x, opponentsMove->y,
+                flipSide(mySide));
     }
     
-    Move *bestMoveSoFar = NULL;
-    int bestScoreSoFar = (minElseMax? std::numeric_limits<int>::max():
-            std::numeric_limits<int>::min());
-    for (int x = 0; x < 8; x++)
+    //std::cerr << "Starting minimax" << std::endl;
+    
+    // run mimimax with alpha-beta pruning
+    int maxDepth = MINIMAX_DEPTH;
+    int currentDepth = 0;
+    int fromDepth = -1;
+    Board *boards = new Board[maxDepth + 1];
+    boards[0] = board;
+    // Index moves from 0 to 63, with x in bits 1-3 and y in bits 4-6
+    unsigned int *moveIndices = new unsigned int[maxDepth + 1];
+    int *minimaxScores = new int[maxDepth + 1];
+    int *alphas = new int[maxDepth + 1];
+    int *betas = new int[maxDepth + 1];
+    minimaxScores[0] = std::numeric_limits<int>::min();
+    alphas[0] = std::numeric_limits<int>::min();
+    betas[0] = std::numeric_limits<int>::max();
+    Side currentSide = mySide;
+    bool minElseMax = false;
+    int chosenMoveIndex = -1;
+    
+    int nodesSearched = 0;
+    
+    while (true)
     {
-        for (int y = 0; y < 8; y++)
+        nodesSearched++;
+        /*fprintf(stderr, "  Depth: %d, moveIndex: %d, minimaxScore: %d\n\talpha: %d, beta: %d\n",
+                currentDepth, moveIndices[currentDepth],
+                minimaxScores[currentDepth], alphas[currentDepth],
+                betas[currentDepth]);*/
+                
+        // tail "recursion"
+        if (currentDepth == maxDepth)
         {
-            Move *moveToTry = new Move(x, y);
-            if (currentBoard.checkMove(moveToTry, turn))
+            minimaxScores[currentDepth] = score(boards[currentDepth]);
+            fromDepth = currentDepth;
+            currentDepth--;
+            currentSide = flipSide(currentSide);
+            minElseMax = !minElseMax;
+            continue;
+        }
+        
+        if (fromDepth < currentDepth)
+        {
+            // we are starting visiting the current node, hence want to
+            // traverse its first child edge (apply the first move)
+            moveIndices[currentDepth] = 0;
+            minimaxScores[currentDepth] =
+                    (minElseMax)? std::numeric_limits<int>::max():
+                    std::numeric_limits<int>::min();
+            // down-propogate alpha and beta values
+            if (currentDepth != 0)
             {
-                // try out the move on a copy of currentBoard
-                Board boardCopy = currentBoard;
-                boardCopy.doMove(moveToTry, mySide);
-                // recurse
-                Move *bestMoveRecurse = NULL;
-                int bestScoreRecurse;
-                minimax(boardCopy, flipSide(turn), !minElseMax, depth - 1,
-                        &bestScoreRecurse, &bestMoveRecurse);
-                if ((minElseMax && bestScoreRecurse < bestScoreSoFar) ||
-                        (!minElseMax && bestScoreRecurse > bestScoreSoFar))
-                {
-                    if (bestMoveSoFar) delete bestMoveSoFar;
-                    bestScoreSoFar = bestScoreRecurse;
-                    bestMoveSoFar = moveToTry;
-                }
-                else delete moveToTry;
+                alphas[currentDepth] = alphas[currentDepth - 1];
+                betas[currentDepth] = betas[currentDepth - 1];
             }
+        }
+        else
+        {
+            if (fromDepth > currentDepth)
+            {
+                // If the child move that was just made minimaxes
+                // so far, record it.
+                if ((minElseMax && minimaxScores[currentDepth + 1] <
+                        minimaxScores[currentDepth]) || (!minElseMax &&
+                        minimaxScores[currentDepth + 1] >
+                        minimaxScores[currentDepth]))
+                {
+                    minimaxScores[currentDepth] =
+                            minimaxScores[currentDepth + 1];
+                    if (currentDepth == 0) {
+                        // The child move just made is our overall chosen
+                        // move (at least so far).
+                        chosenMoveIndex = moveIndices[0];
+                    }
+                    
+                    // If this node is now a guaranteed win for one player,
+                    // prune it.
+                    // Note we must allow twice as many moves as open
+                    // spots due to passing.
+                    /*if (((minElseMax && minimaxScores[currentDepth] < 0) ||
+                            (!minElseMax && minimaxScores[currentDepth] > 0))
+                            && (1 * (64 - boards[currentDepth].count()) <=
+                            maxDepth - currentDepth))
+                    {
+                        // This node is pruned; go to the parent after
+                        // marking this node as certain victory.
+                        minimaxScores[currentDepth] = (minElseMax)?
+                                std::numeric_limits<int>::min() + 1:
+                                std::numeric_limits<int>::max() - 1;
+                        if (currentDepth == 0) break;
+                        else {
+                            fromDepth = currentDepth;
+                            currentDepth--;
+                            currentSide = flipSide(currentSide);
+                            minElseMax = !minElseMax;
+                            continue;
+                        }
+                    }*/
+                    
+                    // up-propogate alpha and beta values
+                    if (minElseMax)
+                    {
+                        betas[currentDepth] = min(betas[currentDepth],
+                                minimaxScores[currentDepth]);
+                    }
+                    else {
+                        alphas[currentDepth] = max(alphas[currentDepth],
+                                minimaxScores[currentDepth]);
+                    }
+                    
+                    // alpha-beta prune
+                    if (alphas[currentDepth] > betas[currentDepth])
+                    {
+                        /*fprintf(stderr, "Pruned: depth=%d, alpha=%d, beta=%d.\n",
+                                currentDepth, alphas[currentDepth],
+                                betas[currentDepth]);*/
+                        // This node is pruned; go to the parent.
+                        if (currentDepth == 0) break;
+                        else {
+                            fromDepth = currentDepth;
+                            currentDepth--;
+                            currentSide = flipSide(currentSide);
+                            minElseMax = !minElseMax;
+                            continue;
+                        }
+                    }
+                }
+            }
+            // else the last child move made was invalid; don't record it
+            
+            // we are moving to the next child edge (move) of this node
+            moveIndices[currentDepth]++;
+            if (moveIndices[currentDepth] >= 64)
+            {
+                // We have tried all possible moves on child edges.
+                // Thus we are done traversing this node unless there
+                // were no valid moves, in which case we need to explore
+                // a new child edge, representing the move "pass".
+                if (currentDepth != 0 && (
+                        (minElseMax && minimaxScores[currentDepth] ==
+                        std::numeric_limits<int>::max()) ||
+                        (!minElseMax && minimaxScores[currentDepth] ==
+                        std::numeric_limits<int>::min())))
+                {
+                    // Need to explore a new child edge, for the move "pass".
+                    
+                    // Board doesn't change.
+                    boards[currentDepth + 1] = boards[currentDepth];
+                    // "Recurse"
+                    fromDepth = currentDepth;
+                    currentDepth++;
+                    currentSide = flipSide(currentSide);
+                    minElseMax = !minElseMax;
+                    continue;
+                }
+                else {
+                    // We are done traversing this node's child edges;
+                    // go to the parent.  Note that even if no child edges
+                    // had valid moves, we will enter this case after
+                    // exploring the "pass" child edge, since exploring
+                    // that edge will set minimaxScores[currentDepth + 1]
+                    // to a non-extreme value.
+                    if (currentDepth == 0) break;
+                    else {
+                        fromDepth = currentDepth;
+                        currentDepth--;
+                        currentSide = flipSide(currentSide);
+                        minElseMax = !minElseMax;
+                        continue;
+                    }
+                }
+            }
+        }
+        
+        // Make the move corresponding to moveIndex[currentDepth].
+        boards[currentDepth + 1] = boards[currentDepth];
+        if (applyMove(boards[currentDepth + 1],
+                moveIndices[currentDepth] % 8, moveIndices[currentDepth] >> 3,
+                currentSide))
+        {
+            // Move was valid; "Recurse"
+            fromDepth = currentDepth;
+            currentDepth++;
+            currentSide = flipSide(currentSide);
+            minElseMax = !minElseMax;
+        }
+        else {
+            // Can't actually make this move; move to the next child of
+            // this node.
+            fromDepth = currentDepth;
         }
     }
     
-    //return the best move
-    *(scoreReturnValue) = bestScoreSoFar;
-    *(moveReturnValue) = bestMoveSoFar;
+    // make the chosen move (possibly NULL, if there are no legal moves)
+    Move *chosenMove = NULL;
+    if (chosenMoveIndex != -1)
+    {
+        chosenMove = new Move(chosenMoveIndex % 8, chosenMoveIndex >> 3);
+        applyMove(board, chosenMove->x, chosenMove->y, mySide);
+    }
+    
+    totalNodesSearched += nodesSearched;
+    fprintf(stderr, "Nodes searched: %d\n", nodesSearched);
+    fprintf(stderr, "Total nodes searched: %li\n", totalNodesSearched);
+    
+    delete moveIndices;
+    delete minimaxScores;
+    delete alphas;
+    delete betas;
+    
+    return chosenMove;
 }
 
 /**
- * @brief Score currentBoard for side (higher is better).
+ * @brief Score currentBoard for mySide (higher is better).
  */
-int Player::score(Board &currentBoard, Side side)
+inline int Player::score(Board &currentBoard)
 {
-    // return (# side's stones - #other side's stones)
-    return (currentBoard.count(side) - currentBoard.count(flipSide(side)));
+    int netBlackCount = currentBoard.countBlack() - currentBoard.countWhite();
+    
+    if (64 != currentBoard.count())
+    {
+        if (currentBoard.get(BLACK, 0, 0)) netBlackCount += CORNER_BONUS;
+        else if (currentBoard.get(WHITE, 0, 0)) netBlackCount -= CORNER_BONUS;
+        if (currentBoard.get(BLACK, 0, 7)) netBlackCount += CORNER_BONUS;
+        else if (currentBoard.get(WHITE, 0, 7)) netBlackCount -= CORNER_BONUS;
+        if (currentBoard.get(BLACK, 7, 0)) netBlackCount += CORNER_BONUS;
+        else if (currentBoard.get(WHITE, 7, 0)) netBlackCount -= CORNER_BONUS;
+        if (currentBoard.get(BLACK, 7, 7)) netBlackCount += CORNER_BONUS;
+        else if (currentBoard.get(WHITE, 7, 7)) netBlackCount -= CORNER_BONUS;
+    }
+    
+    return (mySide == BLACK)? netBlackCount: -netBlackCount;
+}
+
+// returns true iff the given move is valid
+bool Player::applyMove(Board &currentBoard, int moveX, int moveY,
+        Side side)
+{
+    if (currentBoard.checkMove(moveX, moveY, side))
+    {
+        currentBoard.doMove(moveX, moveY, side);
+        return true;
+    }
+    else {
+        return false;
+    }
 }

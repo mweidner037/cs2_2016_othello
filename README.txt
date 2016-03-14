@@ -6,10 +6,11 @@ Player files:
     (maximize number of my stones on the board), made for task
     2 of assignment part 1.
 
-- player.cpp holds the minimax player, currently set to use
-    minimax depth 2, made for task 3 of assignment part 1.
+- player_minimax.cpp and player_minimax.h hold the minimax player,
+    currently set to use minimax depth 2, made for task 3 of
+    assignment part 1.
 
-To test player_task*.cpp, rename the file to player.cpp, then
-make.
+To test player_task*.cpp, rename the file to player.cpp (and the
+header file to player.h, if necessary), then make.
 
 The player compiles to the executable mweidner.

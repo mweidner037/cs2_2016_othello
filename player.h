@@ -3,9 +3,14 @@
 
 #include <iostream>
 #include <limits>
+#include <cstdio>
 #include "common.h"
 #include "board.h"
 using namespace std;
+
+/*struct Board {
+    TODO;
+};*/
 
 class Player {
 
@@ -13,9 +18,8 @@ public:
     Player(Side side);
     ~Player();
     
-    void setBoard(Board &board);
-    
     Move *doMove(Move *opponentsMove, int msLeft);
+    void setBoard(Board &board);
 
     // Flag to tell if the player is running within the test_minimax context
     bool testingMinimax;
@@ -23,9 +27,11 @@ public:
 private:
     Side mySide;
     Board board;
-    void minimax(Board &currentBoard, Side turn, bool minElseMax,
-            int depth, int *scoreReturnValue, Move **moveReturnValue);
-    int score(Board &currentBoard, Side side);
+    int score(Board &currentBoard);
+    bool applyMove(Board &currentBoard, int moveX, int moveY,
+            Side side);
+    
+    long totalNodesSearched;
 };
 
 #endif
