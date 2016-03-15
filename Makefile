@@ -1,5 +1,5 @@
-#CC          = g++
-CC          = icc
+CC          = g++
+#CC          = icc
 #TODO: does icc make the write executables for the cluster?
 CFLAGS      = -Wall -ansi -pedantic -std=c++11 -O2
 #CFLAGS      = -Wall -ansi -pedantic -std=c++11 -ggdb
