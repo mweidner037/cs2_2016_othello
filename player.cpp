@@ -1,7 +1,7 @@
 #include "player.h"
 
-#define EARLY_MINIMAX_DEPTH 11
-#define LATE_MINIMAX_DEPTH 25
+#define EARLY_MINIMAX_DEPTH 10
+#define LATE_MINIMAX_DEPTH 20
 #define TRANSPOSITION_DEPTH 6
 
 const int WIN_SCORE = std::numeric_limits<int>::max() - 2;
