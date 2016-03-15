@@ -2,7 +2,7 @@
 
 #define EARLY_MINIMAX_DEPTH 10
 #define LATE_MINIMAX_DEPTH 20
-#define TRANSPOSITION_DEPTH 5
+#define TRANSPOSITION_DEPTH 6
 
 const int WIN_SCORE = std::numeric_limits<int>::max() - 2;
 const int LOSS_SCORE = std::numeric_limits<int>::min() + 2;
@@ -24,8 +24,26 @@ Player::Player(Side side) {
     mySide = side;
     //TODO: initialize board
     
-    /*movesSoFar = 0;
-    movesSoFarString = "";*/
+    // initialize opening book
+    movesSoFar = 0;
+    movesSoFarString = "";
+    // Load opening book from mweidner_data.dat.
+    // Opening book copied from
+    // http://www.samsoft.org.uk/reversi/openings.htm
+    string line;
+    ifstream myfile ("mweidner_data.dat");
+    if (myfile.is_open())
+    {
+        while (getline (myfile,line) )
+        {
+            if (line.length() > 0)
+                openingBook.push_back(line);
+        }
+        myfile.close();
+    }
+    else {
+        cerr << "ERROR: Unable to load opening book";
+    }
     
     totalNodesSearched = 0;
     totalTranspositionHits = 0;
@@ -61,21 +79,59 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     /* 
      * TODO: Implement how moves your AI should play here. You should first
      * process the opponent's opponents move before calculating your own move
-     */ 
+     */
+    
+    if (opponentsMove == NULL && movesSoFar == 0)
+    {
+        // first move; just go at C4
+        Move *chosenMove = new Move(2, 3);
+        applyMove(board, chosenMove->x, chosenMove->y, mySide);
+                
+        // opening book tracking
+        setStartingMove(chosenMove);
+        recordMove(chosenMove, mySide);
+        
+        return chosenMove;
+    }
     
     // record opponent's move
     if (opponentsMove != NULL)
     {
         applyMove(board, opponentsMove->x, opponentsMove->y,
                 flipSide(mySide));
-        /*if (movesSoFar == 0)
+                
+        // opening book tracking
+        if (movesSoFar == 0)
         {
             setStartingMove(opponentsMove);
         }
-        movesSoFar++;*/
+        recordMove(opponentsMove, flipSide(mySide));
     }
     
-    //std::cerr << "Starting minimax" << std::endl;
+    // use the opening book if we can
+    for (int i = 0; i < openingBook.size(); i++)
+    {
+        string opening = openingBook[i];
+        if (opening.size() > movesSoFarString.size() &&
+                opening.substr(0, movesSoFarString.size()) == movesSoFarString)
+        {
+            cerr << "Using opening: " << opening;
+            string moveStr = opening.substr(movesSoFarString.size(), 2);
+            cerr << " (move: " + moveStr + ": ";
+            int x = (((int) moveStr[0]) - 1) % 32;
+            int y = ((int) moveStr[1]) - 49;
+            Move *normalizedMove = new Move(x, y);
+            cerr << x << ", " << y << ")" << endl;
+            Move *chosenMove = normalizedToReal(normalizedMove);
+            applyMove(board, chosenMove->x, chosenMove->y, mySide);
+            recordMove(chosenMove, mySide);
+            movesSoFar++;
+            
+            delete normalizedMove;
+            
+            return chosenMove;
+        }
+    }
     
     // run mimimax with alpha-beta pruning
     unordered_map<Board, int> *transpositionTable =
@@ -370,11 +426,12 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
         applyMove(board, chosenMove->x, chosenMove->y, mySide);
         fprintf(stderr, "Move value: %d\n", minimaxScores[0]);
         
-        /*if (movesSoFar == 0)
+        if (movesSoFar == 0)
         {
             setStartingMove(chosenMove);
         }
-        movesSoFar++;*/
+        recordMove(chosenMove, mySide);
+        movesSoFar++;
     }
     
     totalTranspositionHits += transpositionHits;
@@ -411,8 +468,83 @@ bool Player::applyMove(Board &currentBoard, int moveX, int moveY,
     }
 }
 
-/*void Player::setStartingMove(Move *move)
+void Player::setStartingMove(Move *move)
 {
+    if (move->x == 2 && move->y == 4) startingMove = C5;
     if (move->x == 2 && move->y == 3) startingMove = C4;
+    if (move->x == 3 && move->y == 2) startingMove = D3;
+    if (move->x == 4 && move->y == 2) startingMove = E3;
+    if (move->x == 5 && move->y == 3) startingMove = F4;
+    if (move->x == 5 && move->y == 4) startingMove = F5;
+    if (move->x == 4 && move->y == 5) startingMove = E6;
+    if (move->x == 3 && move->y == 5) startingMove = D6;
+}
+
+void Player::recordMove(Move *move, Side side)
+{
+    Move *normalized = realToNormalized(move);
+    char letter = (side == BLACK)? 64 + (normalized->x + 1):
+            96 + (normalized->x + 1);
+    char number = 49 + normalized->y;
+    movesSoFarString.push_back(letter);
+    movesSoFarString.push_back(number);
+    movesSoFar++;
     
-}*/
+    //cerr << movesSoFarString << endl;
+    
+    //usleep(10000000);
+}
+
+Move *Player::realToNormalized(Move *real)
+{
+    switch (startingMove)
+    {
+        case C5: return new Move(real->x, 7 - real->y);
+        case C4: return new Move(real->x, real->y);
+        case D3: return new Move(real->y, real->x);
+        case E3: return new Move(real->y, 7 - real->x);
+        case F4: return new Move(7 - real->x, real->y);
+        case F5: return new Move(7 - real->x, 7 - real->y);
+        case E6: return new Move(7 - real->y, 7 - real->x);
+        case D6: return new Move(7 - real->y, real->x);
+        default:
+            fprintf(stderr, "ERROR: no normalization");
+            return NULL;
+    }
+}
+
+Move *Player::normalizedToReal(Move *normalized)
+{
+    // lazy hack
+    Move *tryMove = new Move(0, 0);
+    for (int flip = 0; flip <= 1; flip++)
+    {
+        for (int negX = 0; negX <= 1; negX++)
+        {
+            for (int negY = 0; negY <= 1; negY++)
+            {
+                if (flip)
+                {
+                    tryMove->x = normalized->y;
+                    tryMove->y = normalized->x;
+                }
+                else {
+                    tryMove->x = normalized->x;
+                    tryMove->y = normalized->y;
+                }
+                if (negX) tryMove->x = 7 - tryMove->x;
+                if (negY) tryMove->y = 7 - tryMove->y;
+                Move *realTryMove = realToNormalized(tryMove);
+                if (realTryMove->x == normalized->x &&
+                        realTryMove->y == normalized->y)
+                {
+                    return tryMove;
+                }
+                else delete realTryMove;
+            }
+        }
+    }
+    
+    fprintf(stderr, "ERROR: no inverse");
+    return NULL;
+}

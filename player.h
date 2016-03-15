@@ -5,6 +5,10 @@
 #include <limits>
 #include <cstdio>
 #include <unordered_map>
+#include <unistd.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
 #include "common.h"
 #include "board.h"
 using namespace std;
@@ -33,15 +37,19 @@ private:
     
     // movesSoFarString is normalized to start with C4.
     // The actual first move is described by startingMove.
-   /* int movesSoFar;
+    int movesSoFar;
     string movesSoFarString;
-    StartingMove startingMove;*/
+    StartingMove startingMove;
     
     int score(Board &currentBoard);
     bool applyMove(Board &currentBoard, int moveX, int moveY,
             Side side);
+    vector<string> openingBook;
             
-//    void setStartingMove(Move *move);
+    void setStartingMove(Move *move);
+    void recordMove(Move *move, Side side);
+    Move *realToNormalized(Move *real);
+    Move *normalizedToReal(Move *normalized);
 };
 
 #endif
