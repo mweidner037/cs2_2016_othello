@@ -2,6 +2,7 @@
 
 #define EARLY_MINIMAX_DEPTH 10
 #define LATE_MINIMAX_DEPTH 20
+#define TRANSPOSITION_DEPTH 5
 
 const int WIN_SCORE = std::numeric_limits<int>::max() - 2;
 const int LOSS_SCORE = std::numeric_limits<int>::min() + 2;
@@ -23,7 +24,11 @@ Player::Player(Side side) {
     mySide = side;
     //TODO: initialize board
     
+    /*movesSoFar = 0;
+    movesSoFarString = "";*/
+    
     totalNodesSearched = 0;
+    totalTranspositionHits = 0;
 }
 
 /*
@@ -63,15 +68,25 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     {
         applyMove(board, opponentsMove->x, opponentsMove->y,
                 flipSide(mySide));
+        /*if (movesSoFar == 0)
+        {
+            setStartingMove(opponentsMove);
+        }
+        movesSoFar++;*/
     }
     
     //std::cerr << "Starting minimax" << std::endl;
     
     // run mimimax with alpha-beta pruning
+    unordered_map<Board, int> *transpositionTable =
+            new unordered_map<Board, int>();
+    int transpositionHits = 0;
+    
     int maxDepth = (64 - board.count() <= LATE_MINIMAX_DEPTH)?
             LATE_MINIMAX_DEPTH: EARLY_MINIMAX_DEPTH;
     int currentDepth = 0;
     int fromDepth = -1;
+    
     Board *boards = new Board[2*(maxDepth + 2)];
     boards[0] = board;
     // Index moves from 0 to 63, with x in bits 1-3 and y in bits 4-6
@@ -85,11 +100,14 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     minimaxScores[0] = std::numeric_limits<int>::min();
     alphas[0] = std::numeric_limits<int>::min();
     betas[0] = std::numeric_limits<int>::max();
+    
     Side currentSide = mySide;
     bool minElseMax = false;
     int chosenMoveIndex = -1;
+    
     // We stop after two passes in a row, since then the game is over.
     int passesInARow = 0;
+    
     // When maxDepth permits perfect play (without counting passes as moves),
     // play to the bottom of the search tree instead of just to maxDepth.
     // (If passes were impossible, perfectPlay would have no effect.)
@@ -145,6 +163,25 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
             continue;
         }
         
+        // lookup in transposition table
+        if (currentDepth == TRANSPOSITION_DEPTH)
+        {
+            unordered_map<Board, int>::const_iterator got =
+                    transpositionTable->find(boards[currentDepth]);
+            if (got != transpositionTable->end())
+            {
+                // Found it in the transposition table; record and go
+                // back to parent.
+                transpositionHits++;
+                minimaxScores[currentDepth] = got->second;
+                fromDepth = currentDepth;
+                currentDepth--;
+                currentSide = flipSide(currentSide);
+                minElseMax = !minElseMax;
+                continue;
+            }
+        }
+        
         if (fromDepth < currentDepth)
         {
             // we are starting visiting the current node, hence want to
@@ -164,6 +201,13 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
         {
             if (fromDepth > currentDepth)
             {
+                // store the child that was just visited in transpositionTable
+                if (fromDepth == TRANSPOSITION_DEPTH)
+                {
+                    (*transpositionTable)[boards[currentDepth + 1]] =
+                            minimaxScores[currentDepth + 1];
+                }
+                
                 // If the child move that was just made minimaxes
                 // so far, record it.
                 if ((minElseMax && minimaxScores[currentDepth + 1] <
@@ -325,17 +369,30 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
         chosenMove = new Move(chosenMoveIndex % 8, chosenMoveIndex >> 3);
         applyMove(board, chosenMove->x, chosenMove->y, mySide);
         fprintf(stderr, "Move value: %d\n", minimaxScores[0]);
+        
+        /*if (movesSoFar == 0)
+        {
+            setStartingMove(chosenMove);
+        }
+        movesSoFar++;*/
     }
     
+    totalTranspositionHits += transpositionHits;
+    fprintf(stderr, "Transposition hits (local/total): %d/%d\n",
+            transpositionHits, totalTranspositionHits);
+            
     totalNodesSearched += nodesSearched;
-    fprintf(stderr, "Nodes searched: %d\n", nodesSearched);
-    fprintf(stderr, "Total nodes searched: %li\n", totalNodesSearched);
+    fprintf(stderr, "Nodes searched (local/total): %d/%li\n",
+            nodesSearched, totalNodesSearched);
+            
+    fprintf(stderr, "msLeft: %d\n", msLeft);
     
     delete[] boards;
     delete[] moveIndices;
     delete[] minimaxScores;
     delete[] alphas;
     delete[] betas;
+    delete transpositionTable;
     
     return chosenMove;
 }
@@ -353,3 +410,9 @@ bool Player::applyMove(Board &currentBoard, int moveX, int moveY,
         return false;
     }
 }
+
+/*void Player::setStartingMove(Move *move)
+{
+    if (move->x == 2 && move->y == 3) startingMove = C4;
+    
+}*/

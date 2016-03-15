@@ -13,7 +13,6 @@ private:
      * (see BLACK, WHITE, BLANK in common.h), highest 2 bits
      * represent x = 7.
      */
-    uint16_t rows[8];
     int counts[3];
     
     int cachedBlackScore;
@@ -28,6 +27,8 @@ public:
     ~Board();
     Board *copy();
         
+    uint16_t rows[8];
+    
     //bool isDone();
     //bool hasMoves(Side side);
     bool checkMove(int X, int Y, Side side);
@@ -42,8 +43,25 @@ public:
     //int countStableBlack();
     //int countStableWhite();
     Side get(int x, int y);
+    
+    bool operator==(const Board &other) const;
 
     void setBoard(char data[]);
 };
+
+// based off of http://stackoverflow.com/questions/17016175/
+// c-unordered-map-using-a-custom-class-type-as-the-key
+namespace std {
+
+    template <>
+    struct hash<Board>
+    {
+        std::size_t operator()(const Board& b) const
+        {
+            return b.rows[3] + (b.rows[2] << 8) + (b.rows[1] << 16) +
+                    (b.rows[0] << 24);
+        }
+    };
+}
 
 #endif

@@ -4,13 +4,13 @@
 #include <iostream>
 #include <limits>
 #include <cstdio>
+#include <unordered_map>
 #include "common.h"
 #include "board.h"
 using namespace std;
 
-/*struct Board {
-    TODO;
-};*/
+enum StartingMove { C5 = 0, C4 = 1, D3 = 2, E3 = 3, F4 = 4,
+        F5 = 5, E6 = 6, D6 = 7 };
 
 class Player {
 
@@ -27,11 +27,21 @@ public:
 private:
     Side mySide;
     Board board;
+    
+    long totalNodesSearched;
+    int totalTranspositionHits;
+    
+    // movesSoFarString is normalized to start with C4.
+    // The actual first move is described by startingMove.
+   /* int movesSoFar;
+    string movesSoFarString;
+    StartingMove startingMove;*/
+    
     int score(Board &currentBoard);
     bool applyMove(Board &currentBoard, int moveX, int moveY,
             Side side);
-    
-    long totalNodesSearched;
+            
+//    void setStartingMove(Move *move);
 };
 
 #endif

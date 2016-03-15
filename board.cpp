@@ -39,6 +39,9 @@ Side Board::get(int x, int y) {
     return (rows[y] >> (2*x)) % 4;
 }
 
+/*
+ * Note that this doesn't affect borderSpaces; only doMove does.
+ */
 void Board::set(Side side, int x, int y) {
     Side currentValue = get(x, y);
     if (currentValue == side) return;
@@ -190,6 +193,7 @@ void Board::doMove(int X, int Y, Side side)
         }
     }
     set(side, X, Y);
+    //borderSpaces.reset(X + 8*Y); // not really necessary
 }
 
 /*
@@ -275,9 +279,21 @@ int Board::score(Side side) {
     return stable.count() - stableBlack;
 }*/
 
+// based off of http://stackoverflow.com/questions/17016175/
+// c-unordered-map-using-a-custom-class-type-as-the-key
+bool Board::operator==(const Board &other) const
+{
+    for (int i = 0; i < 8; i++)
+    {
+        if (rows[i] != other.rows[i]) return false;
+    }
+    return true;
+}
+
 /*
  * Sets the board state given an 8x8 char array where 'w' indicates a white
  * piece and 'b' indicates a black piece. Mainly for testing purposes.
+ * TODO: does not yet update borderSpaces.
  */
 void Board::setBoard(char data[]) {
     for (int i = 0; i < 8; i++) rows[i] = 0;
