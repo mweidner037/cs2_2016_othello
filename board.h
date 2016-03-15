@@ -31,6 +31,7 @@ public:
     
     //bool isDone();
     //bool hasMoves(Side side);
+    int countMoves(Side side);
     bool checkMove(int X, int Y, Side side);
     void doMove(Move *m, Side side);
     void doMove(int X, int Y, Side side);

@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <ctime>
 #include "common.h"
 #include "board.h"
 using namespace std;
@@ -45,6 +46,9 @@ private:
     bool applyMove(Board &currentBoard, int moveX, int moveY,
             Side side);
     vector<string> openingBook;
+    
+    bool haveTimeForPerfection(int topLevelMovesSoFar, int topLevelMoves,
+        int msLeft, time_t startTime);
             
     void setStartingMove(Move *move);
     void recordMove(Move *move, Side side);
