@@ -1,13 +1,15 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-enum Side { 
-    WHITE, BLACK
-};
+#define WHITE 1
+#define BLACK 2
+#define BLANK 0
 
-inline Side flipSide(Side side)
+using Side = int;
+
+inline int flipSide(int side)
 {
-    return (side == WHITE)? BLACK: WHITE;
+    return (side == BLACK)? WHITE: BLACK;
 }
 
 class Move {

@@ -2,17 +2,22 @@
 #define __BOARD_H__
 
 #include <bitset>
+#include <cstdint>
 #include "common.h"
 using namespace std;
 
 class Board {
    
 private:
-    bitset<64> black;
-    bitset<64> taken;
-    //bitset<64> stable;
+    /* Each row is a 16-bit integer.  Lowest 2 bits represent x = 0
+     * (see BLACK, WHITE, BLANK in common.h), highest 2 bits
+     * represent x = 7.
+     */
+    uint16_t rows[8];
+    int counts[3];
     
-    int stableBlack;
+    int cachedBlackScore;
+    bool cachedScoreValid;
        
     void set(Side side, int x, int y);
     bool onBoard(int x, int y);
@@ -32,11 +37,11 @@ public:
     int count(Side side);
     int countBlack();
     int countWhite();
+    int score(Side side);
     //int countStable(Side side);
     //int countStableBlack();
     //int countStableWhite();
-    bool get(Side side, int x, int y);
-    bool occupied(int x, int y);
+    Side get(int x, int y);
 
     void setBoard(char data[]);
 };

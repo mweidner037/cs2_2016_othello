@@ -1,17 +1,19 @@
 #include "board.h"
 
+#define CORNER_BONUS 25
+
 /*
  * Make a standard 8x8 othello board and initialize it to the standard setup.
  */
 Board::Board() {
-    taken.set(3 + 8 * 3);
-    taken.set(3 + 8 * 4);
-    taken.set(4 + 8 * 3);
-    taken.set(4 + 8 * 4);
-    black.set(4 + 8 * 3);
-    black.set(3 + 8 * 4);
+    for (int i = 0; i < 8; i++) rows[i] = 0;
+    counts[WHITE] = 0;
+    counts[BLACK] = 0;
     
-    stableBlack = 0;
+    set(WHITE, 3, 3);
+    set(WHITE, 4, 4);
+    set(BLACK, 4, 3);
+    set(BLACK, 3, 4);
 }
 
 /*
@@ -25,24 +27,27 @@ Board::~Board() {
  */
 Board *Board::copy() {
     Board *newBoard = new Board();
-    newBoard->black = black;
-    newBoard->taken = taken;
+    for (int i = 0; i < 8; i++) newBoard->rows[i] = rows[i];
+    newBoard->counts[WHITE] = counts[WHITE];
+    newBoard->counts[BLACK] = counts[BLACK];
     return newBoard;
 }
 
-bool Board::occupied(int x, int y) {
-    return taken[x + 8*y];
-}
-
-bool Board::get(Side side, int x, int y) {
-    return occupied(x, y) && (black[x + 8*y] == (side == BLACK));
+/* Returns the value at (x, y) (one of WHITE, BLACK, BLANK)
+*/
+Side Board::get(int x, int y) {
+    return (rows[y] >> (2*x)) % 4;
 }
 
 void Board::set(Side side, int x, int y) {
-    taken.set(x + 8*y);
-    black.set(x + 8*y, side == BLACK);
-    // check if it's stable
-//    if (!stable[x + 8*y]) checkIfStable(x, y);
+    Side currentValue = get(x, y);
+    if (currentValue == side) return;
+    if (currentValue == flipSide(side)) counts[flipSide(side)]--;
+    counts[side]++;
+    cachedScoreValid = false;
+    
+    rows[y] &= ~(3 << (2*x));
+    rows[y] |= side << (2*x);
 }
 
 /*// Checks whether the taken space (x, y) is stable, and if so,
@@ -88,7 +93,7 @@ void Board::checkIfStable(int x, int y)
     }
 }*/
 
-bool Board::onBoard(int x, int y) {
+inline bool Board::onBoard(int x, int y) {
     return(0 <= x && x < 8 && 0 <= y && y < 8);
 }
 
@@ -119,9 +124,8 @@ bool Board::onBoard(int x, int y) {
  */
 bool Board::checkMove(int X, int Y, Side side) {
     // Make sure the square hasn't already been taken.
-    if (occupied(X, Y)) return false;
+    if (!onBoard(X, Y) || get(X, Y) != BLANK) return false;
 
-    Side other = (side == BLACK) ? WHITE : BLACK;
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
             if (dy == 0 && dx == 0) continue;
@@ -129,13 +133,13 @@ bool Board::checkMove(int X, int Y, Side side) {
             // Is there a capture in that direction?
             int x = X + dx;
             int y = Y + dy;
-            if (onBoard(x, y) && get(other, x, y)) {
+            if (onBoard(x, y) && get(x, y) == flipSide(side)) {
                 do {
                     x += dx;
                     y += dy;
-                } while (onBoard(x, y) && get(other, x, y));
+                } while (onBoard(x, y) && get(x, y) == flipSide(side));
 
-                if (onBoard(x, y) && get(side, x, y)) return true;
+                if (onBoard(x, y) && get(x, y) == side) return true;
             }
         }
     }
@@ -161,7 +165,6 @@ void Board::doMove(int X, int Y, Side side)
     /*// Ignore if move is invalid.
     if (!checkMove(m, side)) return;*/
 
-    Side other = (side == BLACK) ? WHITE : BLACK;
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
             if (dy == 0 && dx == 0) continue;
@@ -171,14 +174,14 @@ void Board::doMove(int X, int Y, Side side)
             do {
                 x += dx;
                 y += dy;
-            } while (onBoard(x, y) && get(other, x, y));
+            } while (onBoard(x, y) && get(x, y) == flipSide(side));
 
-            if (onBoard(x, y) && get(side, x, y)) {
+            if (onBoard(x, y) && get(x, y) == side) {
                 x = X;
                 y = Y;
                 x += dx;
                 y += dy;
-                while (onBoard(x, y) && get(other, x, y)) {
+                while (onBoard(x, y) && get(x, y) == flipSide(side)) {
                     set(side, x, y);
                     x += dx;
                     y += dy;
@@ -193,28 +196,57 @@ void Board::doMove(int X, int Y, Side side)
  * Current count of total stones.
  */
 int Board::count() {
-    return taken.count();
+    return counts[WHITE] + counts[BLACK];
 }
 
 /*
  * Current count of given side's stones.
  */
 int Board::count(Side side) {
-    return (side == BLACK) ? countBlack() : countWhite();
+    return counts[side];
 }
 
 /*
  * Current count of black stones.
  */
 int Board::countBlack() {
-    return black.count();
+    return counts[BLACK];
 }
 
 /*
  * Current count of white stones.
  */
 int Board::countWhite() {
-    return taken.count() - black.count();
+    return counts[WHITE];
+}
+
+/*
+ * Score this board for side (higher is better).
+ */
+int Board::score(Side side) {
+    if (cachedScoreValid)
+    {
+        return (side == BLACK)? cachedBlackScore: -cachedBlackScore;
+    }
+    
+    int netBlackScore = countBlack() - countWhite();
+    
+    if (64 != count())
+    {
+        if (get(0, 0) == BLACK) netBlackScore += CORNER_BONUS;
+        else if (get(0, 0) == WHITE) netBlackScore -= CORNER_BONUS;
+        if (get(0, 7) == BLACK) netBlackScore += CORNER_BONUS;
+        else if (get(0, 7) == WHITE) netBlackScore -= CORNER_BONUS;
+        if (get(7, 0) == BLACK) netBlackScore += CORNER_BONUS;
+        else if (get(7, 0) == WHITE) netBlackScore -= CORNER_BONUS;
+        if (get(7, 7) == BLACK) netBlackScore += CORNER_BONUS;
+        else if (get(7, 7) == WHITE) netBlackScore -= CORNER_BONUS;
+    }
+    
+    cachedBlackScore = netBlackScore;
+    cachedScoreValid = true;
+    
+    return (side == BLACK)? cachedBlackScore: -cachedBlackScore;
 }
 
 /*
@@ -248,14 +280,15 @@ int Board::countWhite() {
  * piece and 'b' indicates a black piece. Mainly for testing purposes.
  */
 void Board::setBoard(char data[]) {
-    taken.reset();
-    black.reset();
+    for (int i = 0; i < 8; i++) rows[i] = 0;
+    counts[WHITE] = 0;
+    counts[BLACK] = 0;
+    
     for (int i = 0; i < 64; i++) {
         if (data[i] == 'b') {
-            taken.set(i);
-            black.set(i);
+            set(BLACK, i % 8, i >> 3);
         } if (data[i] == 'w') {
-            taken.set(i);
+            set(WHITE, i % 8, i >> 3);
         }
     }
 }

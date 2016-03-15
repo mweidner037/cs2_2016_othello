@@ -1,7 +1,10 @@
 #include "player.h"
 
-#define MINIMAX_DEPTH 9
-#define CORNER_BONUS 100
+#define EARLY_MINIMAX_DEPTH 10
+#define LATE_MINIMAX_DEPTH 20
+
+const int WIN_SCORE = std::numeric_limits<int>::max() - 2;
+const int LOSS_SCORE = std::numeric_limits<int>::min() + 2;
 
 /*
  * Constructor for the player; initialize everything here. The side your AI is
@@ -65,37 +68,76 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     //std::cerr << "Starting minimax" << std::endl;
     
     // run mimimax with alpha-beta pruning
-    int maxDepth = MINIMAX_DEPTH;
+    int maxDepth = (64 - board.count() <= LATE_MINIMAX_DEPTH)?
+            LATE_MINIMAX_DEPTH: EARLY_MINIMAX_DEPTH;
     int currentDepth = 0;
     int fromDepth = -1;
-    Board *boards = new Board[maxDepth + 1];
+    Board *boards = new Board[2*(maxDepth + 2)];
     boards[0] = board;
     // Index moves from 0 to 63, with x in bits 1-3 and y in bits 4-6
-    unsigned int *moveIndices = new unsigned int[maxDepth + 1];
-    int *minimaxScores = new int[maxDepth + 1];
-    int *alphas = new int[maxDepth + 1];
-    int *betas = new int[maxDepth + 1];
+    unsigned int *moveIndices = new unsigned int[2*(maxDepth + 1)];
+    int *minimaxScores = new int[2*(maxDepth + 1)];
+    int *alphas = new int[2*(maxDepth + 1)];
+    int *betas = new int[2*(maxDepth + 1)];
+    /* Scores of min/max indicate unset; scores of WIN_SCORE/LOSS_SCORE
+     * indicate definite win/loss.
+     */
     minimaxScores[0] = std::numeric_limits<int>::min();
     alphas[0] = std::numeric_limits<int>::min();
     betas[0] = std::numeric_limits<int>::max();
     Side currentSide = mySide;
     bool minElseMax = false;
     int chosenMoveIndex = -1;
+    // We stop after two passes in a row, since then the game is over.
+    int passesInARow = 0;
+    // When maxDepth permits perfect play (without counting passes as moves),
+    // play to the bottom of the search tree instead of just to maxDepth.
+    // (If passes were impossible, perfectPlay would have no effect.)
+    bool perfectPlay = (maxDepth + board.count() >= 64);
+    if (perfectPlay) fprintf(stderr, "Perfect play...\n");
     
     int nodesSearched = 0;
     
     while (true)
     {
         nodesSearched++;
-        /*fprintf(stderr, "  Depth: %d, moveIndex: %d, minimaxScore: %d\n\talpha: %d, beta: %d\n",
-                currentDepth, moveIndices[currentDepth],
-                minimaxScores[currentDepth], alphas[currentDepth],
-                betas[currentDepth]);*/
+        /*if (currentDepth <= 2 && fromDepth != -1)
+        {
+            fprintf(stderr, "\tEnd minimaxScore: %d\n", minimaxScores[fromDepth]);
+            fprintf(stderr, "  Depth: %d, moveIndex: %d, minimaxScore: %d\n\talpha: %d, beta: %d\n",
+                    currentDepth, moveIndices[currentDepth],
+                    minimaxScores[currentDepth], alphas[currentDepth],
+                    betas[currentDepth]);
+        }*/
                 
         // tail "recursion"
-        if (currentDepth == maxDepth)
+        if ((!perfectPlay && currentDepth == maxDepth) ||
+                boards[currentDepth].count() == 64)
         {
-            minimaxScores[currentDepth] = score(boards[currentDepth]);
+            if (boards[currentDepth].count() == 64)
+            {
+                // the board is full; record the winner
+                if (boards[currentDepth].count(mySide) > 32)
+                {
+                    minimaxScores[currentDepth] = WIN_SCORE;
+                }
+                else if (boards[currentDepth].count(mySide) < 32)
+                {
+                    minimaxScores[currentDepth] = LOSS_SCORE;
+                }
+                else minimaxScores[currentDepth] = 0;
+            }
+            else if (currentDepth >= 3)
+            {
+                minimaxScores[currentDepth] =
+                        boards[currentDepth].score(mySide) +
+                        boards[currentDepth - 1].score(mySide) +
+                        boards[currentDepth - 2].score(mySide) +
+                        boards[currentDepth - 3].score(mySide);
+            }
+            else {
+                minimaxScores[currentDepth] = boards[currentDepth].score(mySide);
+            }
             fromDepth = currentDepth;
             currentDepth--;
             currentSide = flipSide(currentSide);
@@ -138,19 +180,12 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
                     }
                     
                     // If this node is now a guaranteed win for one player,
-                    // prune it.
-                    // Note we must allow twice as many moves as open
-                    // spots due to passing.
-                    /*if (((minElseMax && minimaxScores[currentDepth] < 0) ||
-                            (!minElseMax && minimaxScores[currentDepth] > 0))
-                            && (1 * (64 - boards[currentDepth].count()) <=
-                            maxDepth - currentDepth))
+                    // prune the rest of its children, by going to the parent.
+                    if ((minElseMax &&
+                            minimaxScores[currentDepth] == LOSS_SCORE) ||
+                            (!minElseMax &&
+                            minimaxScores[currentDepth] == WIN_SCORE))
                     {
-                        // This node is pruned; go to the parent after
-                        // marking this node as certain victory.
-                        minimaxScores[currentDepth] = (minElseMax)?
-                                std::numeric_limits<int>::min() + 1:
-                                std::numeric_limits<int>::max() - 1;
                         if (currentDepth == 0) break;
                         else {
                             fromDepth = currentDepth;
@@ -159,7 +194,7 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
                             minElseMax = !minElseMax;
                             continue;
                         }
-                    }*/
+                    }
                     
                     // up-propogate alpha and beta values
                     if (minElseMax)
@@ -206,7 +241,34 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
                         (!minElseMax && minimaxScores[currentDepth] ==
                         std::numeric_limits<int>::min())))
                 {
-                    // Need to explore a new child edge, for the move "pass".
+                    // Need to explore a new child edge, for the move "pass",
+                    // unless doing so would involve both players passing,
+                    // in which case the game is over.
+                    passesInARow++;
+                    if (passesInARow > 2)
+                        fprintf(stderr, "ERROR: too many passes\n");
+                    if (passesInARow >= 2)
+                    {
+                        // the game ended at this node; record the result
+                        if (board.count(mySide) >
+                                board.count(flipSide(mySide)))
+                        {
+                            minimaxScores[currentDepth] = WIN_SCORE;
+                        }
+                        else if (board.count(mySide) <
+                                board.count(flipSide(mySide)))
+                        {
+                            minimaxScores[currentDepth] = LOSS_SCORE;
+                        }
+                        else minimaxScores[currentDepth] = 0;
+                        // now go back to the parent
+                        passesInARow = 0;
+                        fromDepth = currentDepth;
+                        currentDepth--;
+                        currentSide = flipSide(currentSide);
+                        minElseMax = !minElseMax;
+                        continue;
+                    }
                     
                     // Board doesn't change.
                     boards[currentDepth + 1] = boards[currentDepth];
@@ -243,6 +305,7 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
                 currentSide))
         {
             // Move was valid; "Recurse"
+            passesInARow = 0;
             fromDepth = currentDepth;
             currentDepth++;
             currentSide = flipSide(currentSide);
@@ -261,40 +324,20 @@ Move *Player::doMove(Move *opponentsMove, int msLeft) {
     {
         chosenMove = new Move(chosenMoveIndex % 8, chosenMoveIndex >> 3);
         applyMove(board, chosenMove->x, chosenMove->y, mySide);
+        fprintf(stderr, "Move value: %d\n", minimaxScores[0]);
     }
     
     totalNodesSearched += nodesSearched;
     fprintf(stderr, "Nodes searched: %d\n", nodesSearched);
     fprintf(stderr, "Total nodes searched: %li\n", totalNodesSearched);
     
-    delete moveIndices;
-    delete minimaxScores;
-    delete alphas;
-    delete betas;
+    delete[] boards;
+    delete[] moveIndices;
+    delete[] minimaxScores;
+    delete[] alphas;
+    delete[] betas;
     
     return chosenMove;
-}
-
-/**
- * @brief Score currentBoard for mySide (higher is better).
- */
-inline int Player::score(Board &currentBoard)
-{
-    int netBlackCount = currentBoard.countBlack() - currentBoard.countWhite();
-    
-    if (64 != currentBoard.count())
-    {
-        if (currentBoard.get(BLACK, 0, 0)) netBlackCount += CORNER_BONUS;
-        else if (currentBoard.get(WHITE, 0, 0)) netBlackCount -= CORNER_BONUS;
-        if (currentBoard.get(BLACK, 0, 7)) netBlackCount += CORNER_BONUS;
-        else if (currentBoard.get(WHITE, 0, 7)) netBlackCount -= CORNER_BONUS;
-        if (currentBoard.get(BLACK, 7, 0)) netBlackCount += CORNER_BONUS;
-        else if (currentBoard.get(WHITE, 7, 0)) netBlackCount -= CORNER_BONUS;
-        if (currentBoard.get(BLACK, 7, 7)) netBlackCount += CORNER_BONUS;
-        else if (currentBoard.get(WHITE, 7, 7)) netBlackCount -= CORNER_BONUS;
-    }
-    
-    return (mySide == BLACK)? netBlackCount: -netBlackCount;
 }
 
 // returns true iff the given move is valid
